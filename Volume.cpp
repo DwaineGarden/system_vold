@@ -539,9 +539,9 @@ UDISKNOMOUNTED:
         errno = 0;
         setState(Volume::State_Checking);
 
-        if (Fat::check(devicePath) && !isSupNtfs) {
+        if (Fat::check(devicePath) && !isSupNtfs && Exfat::check(devicePath)) {
             if (errno == ENODATA) {
-                SLOGW("%s does not contain a FAT filesystem\n", devicePath);
+                SLOGW("%s does not contain a FAT or Exfat filesystem\n", devicePath);
                 continue;
             }
             errno = EIO;
@@ -580,6 +580,14 @@ UDISKNOMOUNTED:
         	if (Fat::doMount(devicePath, mount_point, false, false, false,
         	        AID_SYSTEM,AID_SDCARD_RW, 0002, true)) {
         		SLOGE("%s failed to mount via VFAT (%s)\n", devicePath, strerror(errno));
+        			if(providesAsec)
+        			{
+						mSkipAsec = true;
+						SLOGE("---------set mSkipAsec to disable app2sd because mount Vfat fail for %s, mountpoint =%s",getLabel(),getMountpoint());
+					}
+			if (ExFat::doMount(devicePath, mount_point, false, false, false,
+        	        AID_SYSTEM,AID_SDCARD_RW, 0002)) {
+        		SLOGE("%s failed to mount via ExFAT (%s)\n", devicePath, strerror(errno));
         			if(providesAsec)
         			{
 						mSkipAsec = true;
