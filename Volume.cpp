@@ -586,7 +586,7 @@ UDISKNOMOUNTED:
 						SLOGE("---------set mSkipAsec to disable app2sd because mount Vfat fail for %s, mountpoint =%s",getLabel(),getMountpoint());
 					}
 			if (ExFat::doMount(devicePath, mount_point, false, false, false,
-        	        AID_SYSTEM,AID_SDCARD_RW, 0002)) {
+        	        AID_SYSTEM,AID_SDCARD_RW, 0002, true)) {
         		SLOGE("%s failed to mount via ExFAT (%s)\n", devicePath, strerror(errno));
         			if(providesAsec)
         			{
@@ -629,11 +629,13 @@ UDISKNOMOUNTED:
                             rmdir(mount_point);
                             releaseLetter(letter);
                         }
+			    
 #endif
 		       		continue;
 		     	}
                	}
         	}
+	    	}
 	    }   
 
 #ifdef SUPPORTED_MULTI_USB_PARTITIONS
