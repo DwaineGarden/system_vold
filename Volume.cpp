@@ -47,6 +47,7 @@
 #include "VolumeManager.h"
 #include "ResponseCode.h"
 #include "Fat.h"
+#include "Exfat.h"
 #include "Process.h"
 #include "cryptfs.h"
 
@@ -150,6 +151,22 @@ dev_t Volume::getDiskDevice() {
 
 dev_t Volume::getShareDevice() {
     return getDiskDevice();
+}
+
+char *getFsType(const char * devicePath) {
+    char *fstype = NULL;
+
+    SLOGD("Trying to get filesystem type for %s \n", devicePath);
+
+    fstype = blkid_get_tag_value(NULL, "TYPE", devicePath);
+    if (fstype) {
+        SLOGD("Found %s filesystem on %s\n", fstype, devicePath);
+    } else {
+        SLOGE("None or unknown filesystem on %s\n", devicePath);
+        return NULL;
+    }
+
+    return fstype;
 }
 
 void Volume::handleVolumeShared() {
@@ -266,6 +283,8 @@ int Volume::createDeviceNode(const char *path, int major, int minor) {
 }
 
 int Volume::formatVol(bool wipe) {
+	
+    char* fstype = NULL;
 
     if (getState() == Volume::State_NoMedia) {
         errno = ENODEV;
@@ -317,14 +336,26 @@ int Volume::formatVol(bool wipe) {
                 MAJOR(partNode), MINOR(partNode));
     }
 
+    fstype = getFsType((const char*)devicePath);
+
     if (mDebug) {
-        SLOGI("Formatting volume %s (%s)", getLabel(), devicePath);
+        SLOGI("Formatting volume %s (%s) as %s", getLabel(), devicePath, fstype);
     }
 
-    if (Fat::format(devicePath, 0, wipe, label)) {
-        SLOGE("Failed to format (%s)", strerror(errno));
-        goto err;
+    if (strcmp(fstype, "exfat") == 0) {
+        ret = Exfat::format(devicePath);
+    } else if (strcmp(fstype, "ntfs") == 0) {
+        ret = Ntfs::format(devicePath, wipe);
+    } else {
+        ret = Fat::format(devicePath, 0, wipe);
     }
+
+    if (ret < 0) {
+        SLOGE("Failed to format (%s)", strerror(errno));
+    }
+
+    free(fstype);
+
     if (!strcmp(getLabel(),"internal_sd")) {
         system("sync");
     }
@@ -497,6 +528,8 @@ UDISKNOMOUNTED:
 
     for (i = 0; i < n; i++) {
         char devicePath[255];
+        char *fstype = NULL;
+
 
         sprintf(devicePath, "/dev/block/vold/%d:%d", MAJOR(deviceNodes[i]),
                 MINOR(deviceNodes[i]));
@@ -575,6 +608,10 @@ UDISKNOMOUNTED:
         	if (Fat::doMount(devicePath, mount_point, false, false, false,
                		AID_SYSTEM,AID_MEDIA_RW, 0002, true)) {
             		SLOGE("%s failed to mount via VFAT (%s)\n", devicePath, strerror(errno));
+            		
+            		    if(Exfat::doMount(devicePath, mount_point, false, false, false,
+               			AID_SYSTEM,AID_MEDIA_RW, 0002)){
+               			SLOGE("%s failed to mount via VNTFS (%s)\n", devicePath, strerror(errno));
             
 			    if(Ntfs::doMount(devicePath, mount_point, false, 1000)){
                			SLOGE("%s failed to mount via VNTFS (%s)\n", devicePath, strerror(errno));
@@ -587,6 +624,7 @@ UDISKNOMOUNTED:
 #endif
 		       		continue;
 		     	}
+               	}
         	}
 	    }   
 
